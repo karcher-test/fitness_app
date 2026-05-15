@@ -415,15 +415,17 @@ interface Props {
       
       {/* Add exercise sheet */}
       {showAddSheet && (
-        <AddExerciseSheet allExercises={allExercises} currentIds={workoutExercises.map(we => we.exercise.id)} onAdd={exercise => {
-          // Add to context with default 3 sets
-          const newIdx = workoutExercises.length
-          addExerciseToSession(exercise)
-          setExpandedIdx(newIdx)
-          setShowAddSheet(false)
-          }} onClose={() => setShowAddSheet(false)} 
-          userId={userId}
-        />
+        <AddExerciseSheet
+  allExercises={allExercises}
+  currentIds={workoutExercises.map(we => we.exercise.id)}
+  onAdd={exercise => {
+    const newIdx = workoutExercises.length
+    addExerciseToSession(exercise)
+    setExpandedIdx(newIdx)
+    setShowAddSheet(false)
+  }}
+  onClose={() => setShowAddSheet(false)}
+/>
 )}
 
 
