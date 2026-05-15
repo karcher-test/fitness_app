@@ -70,7 +70,7 @@ export default async function TrackerPage() {
 
   return (
     <TrackerClient
-      sessions={sessions ?? []}
+      sessions={(sessions ?? []) as any}
       pbs={pbs}
     />
   )
