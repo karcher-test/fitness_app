@@ -42,7 +42,7 @@ interface WorkoutState {
   checkin: CheckinData | null
   sessionId: string | null
   coachReviewDone: boolean
-  exerciseNotes: Record<string, string> // exercise_id → note text
+  exerciseNotes: Record<string, string>
 }
 
 interface WorkoutContextValue extends WorkoutState {
@@ -52,6 +52,7 @@ interface WorkoutContextValue extends WorkoutState {
   updateSet: (exIdx: number, setIdx: number, updates: Partial<WorkoutSet>) => void
   setRpe: (exIdx: number, rpe: number) => void
   markExerciseComplete: (exIdx: number) => void
+  undoComplete: (exIdx: number) => void
   setCheckin: (data: CheckinData) => void
   setSessionId: (id: string) => void
   reset: () => void
@@ -129,6 +130,14 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       ...s,
       workoutExercises: s.workoutExercises.map((we, i) =>
         i !== exIdx ? we : { ...we, complete: true }
+      )
+    }))
+
+  const undoComplete = (exIdx: number) =>
+    setState(s => ({
+      ...s,
+      workoutExercises: s.workoutExercises.map((we, i) =>
+        i !== exIdx ? we : { ...we, complete: false, rpe: null }
       )
     }))
 
@@ -215,11 +224,12 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
     <WorkoutContext.Provider value={{
       ...state,
       setGroup, setSelectedExercises, initWorkoutExercises,
-      updateSet, setRpe, markExerciseComplete,
+      updateSet, setRpe, markExerciseComplete, undoComplete,
       setCheckin, setSessionId, reset,
       addSet, addExerciseToSession,
       removeSet, removeExercise,
-      setCoachReviewDone, setExerciseNote,
+      setCoachReviewDone,
+      setExerciseNote,
     }}>
       {children}
     </WorkoutContext.Provider>
