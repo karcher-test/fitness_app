@@ -629,6 +629,3 @@ function AddExerciseSheet({ allExercises, currentIds, onAdd, onClose }: AddExerc
     </>
   )
 }
-
-// need useState for AddExerciseSheet
-import { useState } from 'react'
