@@ -76,8 +76,8 @@ export default function RecapPage() {
             { label: 'Exercises', value: completedExercises.length },
             { label: 'Sets', value: totalSets },
             { label: 'Reps', value: totalReps },
-            { label: 'Avg RPE', value: avgRpe ?? '—' },
-          ].map(stat => (
+            { label: 'Avg RPE', value: avgRpe ? rpeLabel(avgRpe) : '—' },
+           ].map(stat => (
             <div key={stat.label} style={{ background: C.surface, border: `1px solid ${C.hairStrong}`, borderRadius: 14, padding: '12px 8px', textAlign: 'center' }}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1, color: C.primary }}>{stat.value}</div>
               <div style={{ fontSize: 10, color: C.mute, marginTop: 4, letterSpacing: 0.5 }}>{stat.label}</div>

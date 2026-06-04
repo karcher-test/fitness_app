@@ -133,13 +133,18 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       )
     }))
 
-  const undoComplete = (exIdx: number) =>
-    setState(s => ({
-      ...s,
-      workoutExercises: s.workoutExercises.map((we, i) =>
-        i !== exIdx ? we : { ...we, complete: false, rpe: null }
-      )
-    }))
+    const undoComplete = (exIdx: number) =>
+        setState(s => ({
+          ...s,
+          workoutExercises: s.workoutExercises.map((we, i) =>
+            i !== exIdx ? we : {
+              ...we,
+              complete: false,
+              rpe: null,
+              sets: we.sets.map(set => ({ ...set, logged: false }))
+            }
+          )
+        }))
 
   const setCheckin = (data: CheckinData) =>
     setState(s => ({ ...s, checkin: data }))

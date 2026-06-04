@@ -252,18 +252,24 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
                   {/* Undo complete button */}
                   {we.complete && (
                     <button
-                      onClick={async e => {
-                        e.stopPropagation()
-                        undoComplete(exIdx)
-                        const seId = sessionExerciseIds.current[exIdx]
-                        if (seId) {
-                          await supabase
-                            .from('session_exercises')
-                            .update({ complete: false, rpe: null })
-                            .eq('id', seId)
-                        }
-                        setExpandedIdx(exIdx)
-                      }}
+                    onClick={async e => {
+                      e.stopPropagation()
+                      undoComplete(exIdx)
+                      const seId = sessionExerciseIds.current[exIdx]
+                      if (seId) {
+                        // Delete logged sets so they can be re-entered
+                        await supabase
+                          .from('exercise_sets')
+                          .delete()
+                          .eq('session_exercise_id', seId)
+                        // Mark exercise as incomplete
+                        await supabase
+                          .from('session_exercises')
+                          .update({ complete: false, rpe: null })
+                          .eq('id', seId)
+                      }
+                      setExpandedIdx(exIdx)
+                    }}
                       style={{ flexShrink: 0, fontSize: 11, color: C.mute, background: 'transparent', border: `1px solid ${C.hair}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
                       Undo

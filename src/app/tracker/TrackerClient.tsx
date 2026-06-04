@@ -24,6 +24,14 @@ const ALL_GROUPS = [
   { id: 'glutes', label: 'Glutes' }, { id: 'cardio', label: 'Cardio' },
 ]
 
+function rpeLabel(rpe: number): string {
+    if (rpe <= 1) return 'Too easy'
+    if (rpe <= 3) return 'Good'
+    if (rpe <= 5) return 'Hard'
+    if (rpe <= 7) return 'Very hard'
+    return 'Max effort'
+  }
+
 // ── Types ──────────────────────────────────────────────────────────────────
 interface SessionExercise {
   id: string
@@ -187,8 +195,8 @@ function SessionsTab({ sessions }: { sessions: Session[] }) {
               {[
                 { label: 'Exercises', value: exerciseCount },
                 { label: 'Volume', value: volume >= 1000 ? `${(volume / 1000).toFixed(1)}t` : `${Math.round(volume)}kg` },
-                { label: 'Avg RPE', value: avgRpe ?? '—' },
-              ].map(stat => (
+                { label: 'Avg RPE', value: avgRpe ? rpeLabel(avgRpe) : '—' },
+                ].map(stat => (
                 <div key={stat.label}>
                   <div style={{ fontSize: 16, fontWeight: 700, color: C.primary }}>{stat.value}</div>
                   <div style={{ fontSize: 11, color: C.mute, marginTop: 1 }}>{stat.label}</div>
