@@ -138,26 +138,37 @@ export default function RecapPage() {
                         {we.rpe ? ` · RPE ${we.rpe}` : ''}
                       </div>
                     </div>
-                    {bestSet.weight_kg > 0 && (
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 11, color: C.mute }}>Best set</div>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: C.primary, marginTop: 1 }}>
-                          {bestSet.weight_kg}kg × {bestSet.reps}
-                        </div>
+                  {(bestSet.weight_kg > 0 || we.exercise.muscle_group === 'cardio') && (
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 11, color: C.mute }}>
+                        {we.exercise.muscle_group === 'cardio' ? 'Distance' : 'Best set'}
                       </div>
-                    )}
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.primary, marginTop: 1 }}>
+                        {we.exercise.muscle_group === 'cardio'
+                          ? `${bestSet.weight_kg}km · ${bestSet.reps}m`
+                          : `${bestSet.weight_kg}kg × ${bestSet.reps}`
+                        }
+                      </div>
+                    </div>
+                  )}
                   </div>
 
                   {/* Set pills */}
                   <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {loggedSets.map((s, j) => (
-                      <div
-                        key={j}
-                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, background: C.primarySoft, color: C.primary, fontWeight: 600 }}
-                      >
-                        {s.weight_kg > 0 ? `${s.weight_kg}kg × ${s.reps}` : `${s.reps} reps`}
-                      </div>
-                    ))}
+                    {loggedSets.map((s, j) => {
+                      const isCardio = we.exercise.muscle_group === 'cardio'
+                      return (
+                        <div
+                          key={j}
+                          style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, background: C.primarySoft, color: C.primary, fontWeight: 600 }}
+                        >
+                          {isCardio
+                            ? `${s.weight_kg}km · ${s.reps}mins`
+                            : s.weight_kg > 0 ? `${s.weight_kg}kg × ${s.reps}` : `${s.reps} reps`
+                          }
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )

@@ -353,8 +353,8 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
                     {/* Set rows */}
                     <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 44px 32px', gap: 8, padding: '0 4px' }}>
-                        {['Set', 'Weight (kg)', 'Reps', '', ''].map((h, i) => (
-                          <div key={i} style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: C.mute, fontWeight: 600 }}>{h}</div>
+                      {['Set', we.exercise.muscle_group === 'cardio' ? 'Distance' : 'Weight', we.exercise.muscle_group === 'cardio' ? 'Time' : 'Reps', '', ''].map((h, i) => (
+                       <div key={i} style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: C.mute, fontWeight: 600 }}>{h}</div>
                         ))}
                       </div>
 
@@ -376,6 +376,7 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
                             }
                           }}
                           canRemove={!set.logged && we.sets.length > 1}
+                          isCardio={we.exercise.muscle_group === 'cardio'}
                         />
                       ))}
 
@@ -452,9 +453,9 @@ interface SetRowProps {
   onLog: () => void
   onRemove: () => void
   canRemove: boolean
+  isCardio: boolean
 }
-
-function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, onRemove, canRemove }: SetRowProps) {
+function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, onRemove, canRemove, isCardio }: SetRowProps & { isCardio: boolean }) {
   const inputStyle = (active: boolean): React.CSSProperties => ({
     width: '100%', padding: '10px 8px', borderRadius: 10, border: `1px solid ${active ? C.primary + '60' : C.hair}`,
     background: set.logged ? 'transparent' : C.bgSoft, color: set.logged ? C.mute : C.text,
@@ -467,22 +468,30 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
       <div style={{ fontSize: 12, color: set.logged ? C.good : C.mute, fontWeight: 700, textAlign: 'center' }}>
         {set.logged ? <Check size={14} color={C.good} /> : setNum}
       </div>
-      <input
-        type="number"
-        value={set.weight_kg || ''}
-        onChange={e => onWeightChange(parseFloat(e.target.value) || 0)}
-        disabled={set.logged || disabled}
-        style={inputStyle(!set.logged && !disabled)}
-        inputMode="decimal"
-      />
-      <input
-        type="number"
-        value={set.reps || ''}
-        onChange={e => onRepsChange(parseInt(e.target.value) || 0)}
-        disabled={set.logged || disabled}
-        style={inputStyle(!set.logged && !disabled)}
-        inputMode="numeric"
-      />
+      <div>
+        <input
+          type="number"
+          value={isCardio ? (set.weight_kg || '') : (set.weight_kg || '')}
+          onChange={e => onWeightChange(parseFloat(e.target.value) || 0)}
+          disabled={set.logged || disabled}
+          style={inputStyle(!set.logged && !disabled)}
+          inputMode="decimal"
+          placeholder={isCardio ? 'km' : 'kg'}
+        />
+        <div style={{ fontSize: 9, color: C.mute, textAlign: 'center', marginTop: 2 }}>{isCardio ? 'km' : 'kg'}</div>
+      </div>
+      <div>
+        <input
+          type="number"
+          value={set.reps || ''}
+          onChange={e => onRepsChange(parseInt(e.target.value) || 0)}
+          disabled={set.logged || disabled}
+          style={inputStyle(!set.logged && !disabled)}
+          inputMode="numeric"
+          placeholder={isCardio ? 'mins' : 'reps'}
+        />
+        <div style={{ fontSize: 9, color: C.mute, textAlign: 'center', marginTop: 2 }}>{isCardio ? 'mins' : 'reps'}</div>
+      </div>
       <button
         onClick={onLog}
         disabled={set.logged || disabled}

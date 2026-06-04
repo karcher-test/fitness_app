@@ -66,12 +66,14 @@ interface Props {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function sessionVolume(session: Session): number {
-  return session.session_exercises.reduce((acc, se) =>
-    acc + se.exercise_sets
-      .filter(s => s.logged)
-      .reduce((a, s) => a + s.weight_kg * s.reps, 0)
-  , 0)
-}
+    return session.session_exercises.reduce((acc, se) => {
+      // Skip cardio exercises — distance × time isn't meaningful volume
+      if (se.exercises?.muscle_group === 'cardio') return acc
+      return acc + se.exercise_sets
+        .filter(s => s.logged)
+        .reduce((a, s) => a + s.weight_kg * s.reps, 0)
+    }, 0)
+  }
 
 function sessionDuration(session: Session): string {
   if (!session.finished_at) return '—'
@@ -419,81 +421,88 @@ function HeatmapTab({ sessions }: { sessions: Session[] }) {
 
 // ── PBs tab ────────────────────────────────────────────────────────────────
 function PbsTab({ pbs }: { pbs: PbEntry[] }) {
-  const [activeGroup, setActiveGroup] = useState('chest')
-
-  // Only show groups the user has actually logged
-  const loggedGroups = ALL_GROUPS.filter(g =>
-    pbs.some(pb => pb.muscle_group === g.id)
-  )
-
-  // If active group has no PBs (e.g. on first load), default to first logged group
-  const groupPbs = pbs.filter(pb => pb.muscle_group === activeGroup)
-    .sort((a, b) => b.weight_kg - a.weight_kg)
-
-  if (pbs.length === 0) {
+    const [activeGroup, setActiveGroup] = useState('chest')
+  
+    const loggedGroups = ALL_GROUPS.filter(g =>
+      pbs.some(pb => pb.muscle_group === g.id)
+    )
+  
+    const groupPbs = pbs.filter(pb => pb.muscle_group === activeGroup)
+      .sort((a, b) => b.weight_kg - a.weight_kg)
+  
+    if (pbs.length === 0) {
+      return (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: C.mute }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🏆</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: C.text2 }}>No PBs yet</div>
+          <div style={{ fontSize: 13, marginTop: 6 }}>Complete a workout to set your first records</div>
+        </div>
+      )
+    }
+  
     return (
-      <div style={{ textAlign: 'center', padding: '60px 0', color: C.mute }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>🏆</div>
-        <div style={{ fontSize: 16, fontWeight: 600, color: C.text2 }}>No PBs yet</div>
-        <div style={{ fontSize: 13, marginTop: 6 }}>Complete a workout to set your first records</div>
+      <div>
+        {/* Group filter strip */}
+        <div style={{ overflowX: 'auto', display: 'flex', gap: 8, paddingBottom: 4, scrollbarWidth: 'none', marginBottom: 16 }}>
+          {loggedGroups.map(g => {
+            const active = activeGroup === g.id
+            return (
+              <button
+                key={g.id}
+                onClick={() => setActiveGroup(g.id)}
+                style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 999, border: `1px solid ${active ? C.primary : C.hairStrong}`, background: active ? C.primarySoft : 'transparent', color: active ? C.primary : C.mute, fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: active ? SHADOW_1 : 'none' }}
+              >
+                {g.label}
+              </button>
+            )
+          })}
+        </div>
+  
+        {/* PB cards */}
+        {groupPbs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: C.mute, fontSize: 14 }}>
+            No {activeGroup} PBs yet
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {groupPbs.map(pb => (
+              <div
+                key={pb.id}
+                style={{ background: C.surface, border: `1px solid ${C.hairStrong}`, borderRadius: 16, padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{pb.name}</div>
+                  <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>{pb.equipment}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {pb.muscle_group === 'cardio' ? (
+                    <>
+                      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.primary, lineHeight: 1 }}>
+                        {pb.weight_kg}<span style={{ fontSize: 13, color: C.mute }}>km</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>{pb.reps} mins</div>
+                    </>
+                  ) : pb.weight_kg > 0 ? (
+                    <>
+                      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.primary, lineHeight: 1 }}>
+                        {pb.weight_kg}<span style={{ fontSize: 13, color: C.mute }}>kg</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>× {pb.reps} reps</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.primary, lineHeight: 1 }}>{pb.reps}</div>
+                      <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>reps</div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
-
-  return (
-    <div>
-      {/* Group filter strip */}
-      <div style={{ overflowX: 'auto', display: 'flex', gap: 8, paddingBottom: 4, scrollbarWidth: 'none', marginBottom: 16 }}>
-        {loggedGroups.map(g => {
-          const active = activeGroup === g.id
-          return (
-            <button
-              key={g.id}
-              onClick={() => setActiveGroup(g.id)}
-              style={{ flexShrink: 0, padding: '8px 16px', borderRadius: 999, border: `1px solid ${active ? C.primary : C.hairStrong}`, background: active ? C.primarySoft : 'transparent', color: active ? C.primary : C.mute, fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: active ? SHADOW_1 : 'none' }}
-            >
-              {g.label}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* PB cards */}
-      {groupPbs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 0', color: C.mute, fontSize: 14 }}>
-          No {activeGroup} PBs yet
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gap: 10 }}>
-          {groupPbs.map(pb => (
-            <div
-              key={pb.id}
-              style={{ background: C.surface, border: `1px solid ${C.hairStrong}`, borderRadius: 16, padding: '16px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-            >
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{pb.name}</div>
-                <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>{pb.equipment}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                {pb.weight_kg > 0 ? (
-                  <>
-                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.primary, lineHeight: 1 }}>{pb.weight_kg}<span style={{ fontSize: 13, color: C.mute }}>kg</span></div>
-                    <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>× {pb.reps} reps</div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, color: C.primary, lineHeight: 1 }}>{pb.reps}</div>
-                    <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>reps</div>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── Tab bar ────────────────────────────────────────────────────────────────
 function TabBar({ active }: { active: 'home' | 'tracker' | 'me' }) {
