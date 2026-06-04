@@ -17,6 +17,14 @@ const SHADOW_1 = '0 0 14px rgba(183,148,255,0.5)'
 const FONT_DISPLAY = '"Fraunces", "Cormorant Garamond", Georgia, serif'
 const FONT_BODY = '"Inter", sans-serif'
 
+function rpeLabel(rpe: number): string {
+  if (rpe <= 1) return 'Too easy'
+  if (rpe <= 3) return 'Good'
+  if (rpe <= 5) return 'Hard'
+  if (rpe <= 7) return 'Very hard'
+  return 'Max effort'
+}
+
 export default function RecapPage() {
   const router = useRouter()
   const { workoutExercises, sessionId, group, reset } = useWorkout()
