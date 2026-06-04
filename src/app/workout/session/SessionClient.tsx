@@ -20,49 +20,46 @@ const FONT_DISPLAY = '"Fraunces", "Cormorant Garamond", Georgia, serif'
 const FONT_BODY = '"Inter", sans-serif'
 
 interface Props {
-    userId: string
-    allExercises: import('../context').Exercise[]
-    initialNotes: Record<string, string>
-  }
+  userId: string
+  allExercises: import('../context').Exercise[]
+  initialNotes: Record<string, string>
+}
 
-  export default function SessionClient({ userId, allExercises, initialNotes }: Props) {
+export default function SessionClient({ userId, allExercises, initialNotes }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const {
     workoutExercises, checkin, group,
-    updateSet, setRpe, markExerciseComplete,
+    updateSet, setRpe, markExerciseComplete, undoComplete,
     setSessionId, sessionId, reset,
     addSet, addExerciseToSession,
-    removeSet, removeExercise, exerciseNotes, setExerciseNote,
+    removeSet, removeExercise,
+    exerciseNotes, setExerciseNote,
   } = useWorkout()
 
-  // Which exercise card is expanded
   const [expandedIdx, setExpandedIdx] = useState(0)
-  // Which exercise is showing the RPE sheet
   const [rpeSheetIdx, setRpeSheetIdx] = useState<number | null>(null)
-  // Local RPE hover state
-  const [hoverRpe, setHoverRpe] = useState<number | null>(null)
-  // Whether we're saving (finish button)
   const [saving, setSaving] = useState(false)
-  // Track which session_exercises rows we've already created (exercise index → uuid)
-  const sessionExerciseIds = useRef<Record<number, string>>({})
-  const sessionCreated = useRef(false)
   const [showAddSheet, setShowAddSheet] = useState(false)
-  const [editingNoteId, setEditingNoteId]     = useState<string | null>(null)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editingNoteText, setEditingNoteText] = useState('')
 
-  // ── Guard ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (workoutExercises.length === 0) router.replace('/dashboard')
-  }, [workoutExercises, router])
+  const sessionExerciseIds = useRef<Record<number, string>>({})
+  const sessionCreated = useRef(false)
 
+  // Load initial notes into context
   useEffect(() => {
     for (const [exerciseId, note] of Object.entries(initialNotes)) {
       setExerciseNote(exerciseId, note)
     }
   }, [])
-  // ── Create the session row on mount ─────────────────────────────────────
-  // We do this once. If sessionId is already set (e.g. hot reload), skip.
+
+  // Guard
+  useEffect(() => {
+    if (workoutExercises.length === 0) router.replace('/dashboard')
+  }, [workoutExercises, router])
+
+  // Create session row on mount
   useEffect(() => {
     if (!checkin || sessionId || workoutExercises.length === 0 || sessionCreated.current) return
     sessionCreated.current = true
@@ -81,24 +78,19 @@ interface Props {
         .select('id')
         .single()
 
-      if (error) {
-        console.error('Failed to create session:', error)
-        return
-      }
+      if (error) { console.error('Failed to create session:', error); return }
       setSessionId(data.id)
     }
 
     createSession()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkin, workoutExercises])
 
-  // ── Log a single set ─────────────────────────────────────────────────────
+  // Log a single set
   const logSet = useCallback(async (exIdx: number, setIdx: number) => {
     if (!sessionId) return
     const we = workoutExercises[exIdx]
     const set = we.sets[setIdx]
 
-    // Ensure the session_exercise row exists for this exercise
     let seId = sessionExerciseIds.current[exIdx]
     if (!seId) {
       const { data, error } = await supabase
@@ -116,7 +108,6 @@ interface Props {
       sessionExerciseIds.current[exIdx] = seId
     }
 
-    // Write the set row
     const { error: setError } = await supabase
       .from('exercise_sets')
       .insert({
@@ -129,15 +120,13 @@ interface Props {
 
     if (setError) { console.error('Failed to log set:', setError); return }
 
-    // Mark logged in context
     updateSet(exIdx, setIdx, { logged: true })
 
-    // If this was the last set, show the RPE sheet
     const allLogged = we.sets.every((s, i) => i === setIdx ? true : s.logged)
     if (allLogged) setRpeSheetIdx(exIdx)
   }, [sessionId, workoutExercises, supabase, updateSet])
 
-  // ── Save RPE + mark exercise complete ────────────────────────────────────
+  // Save RPE + mark complete
   const confirmRpe = useCallback(async (exIdx: number, rpe: number) => {
     const seId = sessionExerciseIds.current[exIdx]
     if (seId) {
@@ -150,17 +139,15 @@ interface Props {
     markExerciseComplete(exIdx)
     setRpeSheetIdx(null)
 
-    // Auto-expand the next incomplete exercise
     const nextIdx = workoutExercises.findIndex((we, i) => i > exIdx && !we.complete)
     if (nextIdx !== -1) setExpandedIdx(nextIdx)
   }, [sessionExerciseIds, supabase, setRpe, markExerciseComplete, workoutExercises])
 
-  // ── Finish workout ────────────────────────────────────────────────────────
+  // Finish workout
   const finishWorkout = async () => {
     if (!sessionId) return
     setSaving(true)
     const now = new Date().toISOString()
-    // locked_at = 24 hours from now (server-side edit window)
     const lockedAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
     await supabase
@@ -170,6 +157,8 @@ interface Props {
 
     router.push('/workout/recap')
   }
+
+  // Save note
   const saveNote = async (exerciseId: string, note: string) => {
     setExerciseNote(exerciseId, note)
     const { data: { user } } = await supabase.auth.getUser()
@@ -225,6 +214,8 @@ interface Props {
           {workoutExercises.map((we, exIdx) => {
             const isExpanded = expandedIdx === exIdx
             const loggedSets = we.sets.filter(s => s.logged).length
+            const currentNote = exerciseNotes[we.exercise.id] ?? ''
+            const isEditingNote = editingNoteId === we.exercise.id
 
             return (
               <div
@@ -239,106 +230,124 @@ interface Props {
               >
                 {/* Card header */}
                 <div style={{ display: 'flex', alignItems: 'center', padding: '16px 18px', gap: 8 }}>
-                {/* Tappable area — expands/collapses */}
-                <button
+                  <button
                     onClick={() => setExpandedIdx(isExpanded ? -1 : exIdx)}
                     style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'transparent', border: 'none', cursor: 'pointer', color: C.text, fontFamily: 'inherit', textAlign: 'left', gap: 12, padding: 0 }}
-                >
+                  >
                     <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {we.complete && <Check size={14} color={C.good} />}
                         <span style={{ fontSize: 15, fontWeight: 700, color: we.complete ? C.good : C.text }}>{we.exercise.name}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>
+                      </div>
+                      <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>
                         {we.complete
-                        ? `Done · RPE ${we.rpe ?? '—'}`
-                        : `${loggedSets}/${we.sets.length} sets · ${we.exercise.equipment}`
+                          ? `Done · RPE ${we.rpe ?? '—'}`
+                          : `${loggedSets}/${we.sets.length} sets · ${we.exercise.equipment}`
                         }
-                    </div>
+                      </div>
                     </div>
                     {isExpanded ? <ChevronUp size={18} color={C.mute} /> : <ChevronDown size={18} color={C.mute} />}
-                </button>
+                  </button>
 
-                {/* Remove exercise button — sits outside the expand button */}
-                {!we.complete && (
+                  {/* Undo complete button */}
+                  {we.complete && (
                     <button
-                    onClick={() => {
-                        if (confirm(`Remove ${we.exercise.name}?`)) removeExercise(exIdx)
-                    }}
-                    style={{ width: 32, height: 32, borderRadius: 999, border: `1px solid ${C.danger}40`, background: 'transparent', color: C.danger, display: 'grid', placeItems: 'center', cursor: 'pointer', flexShrink: 0 }}
+                      onClick={async e => {
+                        e.stopPropagation()
+                        undoComplete(exIdx)
+                        const seId = sessionExerciseIds.current[exIdx]
+                        if (seId) {
+                          await supabase
+                            .from('session_exercises')
+                            .update({ complete: false, rpe: null })
+                            .eq('id', seId)
+                        }
+                        setExpandedIdx(exIdx)
+                      }}
+                      style={{ flexShrink: 0, fontSize: 11, color: C.mute, background: 'transparent', border: `1px solid ${C.hair}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
-                    <X size={14} />
+                      Undo
                     </button>
-                )}
+                  )}
+
+                  {/* Remove exercise button */}
+                  {!we.complete && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (confirm(`Remove ${we.exercise.name}?`)) removeExercise(exIdx)
+                      }}
+                      style={{ width: 32, height: 32, borderRadius: 999, border: `1px solid ${C.danger}40`, background: 'transparent', color: C.danger, display: 'grid', placeItems: 'center', cursor: 'pointer', flexShrink: 0 }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
 
                 {/* Expanded content */}
                 {isExpanded && !we.complete && (
                   <div style={{ padding: '0 18px 18px', borderTop: `1px solid ${C.hair}` }}>
-{/* Setup notes */}
-{we.exercise.setup_notes && (
-  <div style={{ padding: '10px 0', fontSize: 12, color: C.text2, lineHeight: 1.5, borderBottom: `1px solid ${C.hair}` }}>
-    {we.exercise.setup_notes}
-  </div>
-)}
+                    {/* Setup notes */}
+                    {we.exercise.setup_notes && (
+                      <div style={{ padding: '10px 0', fontSize: 12, color: C.text2, lineHeight: 1.5, borderBottom: `1px solid ${C.hair}` }}>
+                        {we.exercise.setup_notes}
+                      </div>
+                    )}
 
-{/* Personal note */}
-{(() => {
-  const currentNote = exerciseNotes[we.exercise.id] ?? ''
-  const isEditing = editingNoteId === we.exercise.id
-  return (
-    <div style={{ marginTop: 10, background: 'rgba(183,148,255,0.05)', border: `1px solid ${isEditing ? C.primary + '60' : C.hair}`, borderRadius: 10, padding: '10px 12px', marginBottom: 8, transition: 'border-color 0.2s' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isEditing || currentNote ? 6 : 0 }}>
-        <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: C.primary, fontWeight: 700 }}>My note</div>
-        {!isEditing && (
-          <button
-            onClick={() => { setEditingNoteId(we.exercise.id); setEditingNoteText(currentNote) }}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.mute, cursor: 'pointer', fontSize: 11, padding: 0, fontFamily: 'inherit' }}
-          >
-            <Pencil size={11} />
-            {currentNote ? 'Edit' : 'Add note'}
-          </button>
-        )}
-      </div>
-      {isEditing ? (
-        <div>
-          <textarea
-            autoFocus
-            value={editingNoteText}
-            onChange={e => setEditingNoteText(e.target.value)}
-            placeholder="e.g. Seat height 4 · use far cable machine"
-            rows={2}
-            style={{ width: '100%', background: 'transparent', border: 'none', color: C.text, fontSize: 13, fontFamily: FONT_BODY, resize: 'none', outline: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
-          />
-          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            <button
-              onClick={async () => { await saveNote(we.exercise.id, editingNoteText); setEditingNoteId(null) }}
-              style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${C.primary}, ${C.primary2})`, color: C.bg, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditingNoteId(null)}
-              style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.hair}`, background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : currentNote ? (
-        <div style={{ fontSize: 13, color: C.text2, lineHeight: 1.5 }}>{currentNote}</div>
-      ) : (
-        <div style={{ fontSize: 13, color: C.mute, fontStyle: 'italic' }}>Tap to add a note</div>
-      )}
-    </div>
-  )
-})()}
+                    {/* Personal note */}
+                    {(() => {
+                      return (
+                        <div style={{ marginTop: 10, background: 'rgba(183,148,255,0.05)', border: `1px solid ${isEditingNote ? C.primary + '60' : C.hair}`, borderRadius: 10, padding: '10px 12px', marginBottom: 8, transition: 'border-color 0.2s' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isEditingNote || currentNote ? 6 : 0 }}>
+                            <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: C.primary, fontWeight: 700 }}>My note</div>
+                            {!isEditingNote && (
+                              <button
+                                onClick={() => { setEditingNoteId(we.exercise.id); setEditingNoteText(currentNote) }}
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.mute, cursor: 'pointer', fontSize: 11, padding: 0, fontFamily: 'inherit' }}
+                              >
+                                <Pencil size={11} />
+                                {currentNote ? 'Edit' : 'Add note'}
+                              </button>
+                            )}
+                          </div>
+                          {isEditingNote ? (
+                            <div>
+                              <textarea
+                                autoFocus
+                                value={editingNoteText}
+                                onChange={e => setEditingNoteText(e.target.value)}
+                                placeholder="e.g. Seat height 4 · use far cable machine"
+                                rows={2}
+                                style={{ width: '100%', background: 'transparent', border: 'none', color: C.text, fontSize: 13, fontFamily: FONT_BODY, resize: 'none', outline: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
+                              />
+                              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                                <button
+                                  onClick={async () => { await saveNote(we.exercise.id, editingNoteText); setEditingNoteId(null) }}
+                                  style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${C.primary}, ${C.primary2})`, color: C.bg, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => setEditingNoteId(null)}
+                                  style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.hair}`, background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : currentNote ? (
+                            <div style={{ fontSize: 13, color: C.text2, lineHeight: 1.5 }}>{currentNote}</div>
+                          ) : (
+                            <div style={{ fontSize: 13, color: C.mute, fontStyle: 'italic' }}>Tap to add a note</div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Set rows */}
                     <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-                      {/* Column headers */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 44px', gap: 8, padding: '0 4px' }}>
-                        {[['Set', 'Weight (kg)', 'Reps', '', '']].map((h, i) => (
+                      <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 44px 32px', gap: 8, padding: '0 4px' }}>
+                        {['Set', 'Weight (kg)', 'Reps', '', ''].map((h, i) => (
                           <div key={i} style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: C.mute, fontWeight: 600 }}>{h}</div>
                         ))}
                       </div>
@@ -354,25 +363,22 @@ interface Props {
                           onLog={() => logSet(exIdx, setIdx)}
                           onRemove={() => {
                             removeSet(exIdx, setIdx)
-                            // After removing, check if all remaining sets are logged → show RPE sheet
                             const remainingSets = we.sets.filter((_, j) => j !== setIdx)
                             const allNowLogged = remainingSets.every(s => s.logged)
                             if (allNowLogged && remainingSets.length > 0) {
                               setRpeSheetIdx(exIdx)
                             }
-                          }}                          canRemove={!set.logged && we.sets.length > 1}           
+                          }}
+                          canRemove={!set.logged && we.sets.length > 1}
                         />
                       ))}
 
-                      {/* Add set button */}
-                      {!we.complete && (
-                        <button
-                          onClick={() => addSet(exIdx)}
-                          style={{ marginTop: 4, fontSize: 13, color: C.primary, background: 'transparent', border: `1px dashed ${C.primary}40`, borderRadius: 10, padding: '10px', cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}
-                        >
-                          + Add set
-                        </button>
-                      )}
+                      <button
+                        onClick={() => addSet(exIdx)}
+                        style={{ marginTop: 4, fontSize: 13, color: C.primary, background: 'transparent', border: `1px dashed ${C.primary}40`, borderRadius: 10, padding: '10px', cursor: 'pointer', fontFamily: 'inherit', width: '100%' }}
+                      >
+                        + Add set
+                      </button>
                     </div>
                   </div>
                 )}
@@ -406,30 +412,25 @@ interface Props {
       {rpeSheetIdx !== null && (
         <RpeSheet
           exerciseName={workoutExercises[rpeSheetIdx].exercise.name}
-          hoverRpe={hoverRpe}
-          setHoverRpe={setHoverRpe}
           onSelect={rpe => confirmRpe(rpeSheetIdx, rpe)}
           onSkip={() => confirmRpe(rpeSheetIdx, 5)}
         />
       )}
-      
+
       {/* Add exercise sheet */}
       {showAddSheet && (
         <AddExerciseSheet
-  allExercises={allExercises}
-  currentIds={workoutExercises.map(we => we.exercise.id)}
-  onAdd={exercise => {
-    const newIdx = workoutExercises.length
-    addExerciseToSession(exercise)
-    setExpandedIdx(newIdx)
-    setShowAddSheet(false)
-  }}
-  onClose={() => setShowAddSheet(false)}
-/>
-)}
-
-
-      
+          allExercises={allExercises}
+          currentIds={workoutExercises.map(we => we.exercise.id)}
+          onAdd={exercise => {
+            const newIdx = workoutExercises.length
+            addExerciseToSession(exercise)
+            setExpandedIdx(newIdx)
+            setShowAddSheet(false)
+          }}
+          onClose={() => setShowAddSheet(false)}
+        />
+      )}
     </div>
   )
 }
@@ -448,22 +449,18 @@ interface SetRowProps {
 }
 
 function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, onRemove, canRemove }: SetRowProps) {
-    const inputStyle = (active: boolean): React.CSSProperties => ({
+  const inputStyle = (active: boolean): React.CSSProperties => ({
     width: '100%', padding: '10px 8px', borderRadius: 10, border: `1px solid ${active ? C.primary + '60' : C.hair}`,
     background: set.logged ? 'transparent' : C.bgSoft, color: set.logged ? C.mute : C.text,
     fontSize: 15, fontWeight: 600, textAlign: 'center', fontFamily: FONT_BODY,
     outline: 'none',
-    
   })
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 44px 32px', gap: 8, alignItems: 'center', opacity: disabled ? 0.4 : 1 }}>
-      {/* Set number */}
       <div style={{ fontSize: 12, color: set.logged ? C.good : C.mute, fontWeight: 700, textAlign: 'center' }}>
         {set.logged ? <Check size={14} color={C.good} /> : setNum}
       </div>
-
-      {/* Weight */}
       <input
         type="number"
         value={set.weight_kg || ''}
@@ -472,8 +469,6 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
         style={inputStyle(!set.logged && !disabled)}
         inputMode="decimal"
       />
-
-      {/* Reps */}
       <input
         type="number"
         value={set.reps || ''}
@@ -482,8 +477,6 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
         style={inputStyle(!set.logged && !disabled)}
         inputMode="numeric"
       />
-
-      {/* Log button */}
       <button
         onClick={onLog}
         disabled={set.logged || disabled}
@@ -491,16 +484,13 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
       >
         <Check size={16} />
       </button>
-
-      {/* Remove set */}
-        <button
+      <button
         onClick={onRemove}
         disabled={!canRemove}
         style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${canRemove ? C.danger + '40' : 'transparent'}`, background: 'transparent', color: canRemove ? C.danger : 'transparent', display: 'grid', placeItems: 'center', cursor: canRemove ? 'pointer' : 'default' }}
-        >
+      >
         <X size={14} />
-        </button>
-
+      </button>
     </div>
   )
 }
@@ -509,61 +499,47 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
 
 interface RpeSheetProps {
   exerciseName: string
-  hoverRpe: number | null
-  setHoverRpe: (n: number | null) => void
   onSelect: (rpe: number) => void
   onSkip: () => void
 }
 
-const RPE_LABELS: Record<number, string> = {
-  1: 'Very easy', 2: 'Easy', 3: 'Moderate', 4: 'Somewhat hard',
-  5: 'Hard', 6: 'Hard+', 7: 'Very hard', 8: 'Very hard+',
-  9: 'Near max', 10: 'Max effort',
-}
+const RPE_OPTIONS = [
+  { value: 1,  label: 'Too easy',   sub: 'Could have done much more',   color: '#7EE8C8' },
+  { value: 3,  label: 'Good',       sub: 'Challenging but comfortable',  color: '#B794FF' },
+  { value: 5,  label: 'Hard',       sub: 'Pushed myself',               color: '#FFD1E3' },
+  { value: 7,  label: 'Very hard',  sub: 'Near my limit',               color: '#FF8FD1' },
+  { value: 10, label: 'Max effort', sub: "Couldn't do another rep",     color: '#FF5E8A' },
+]
 
-function RpeSheet({ exerciseName, hoverRpe, setHoverRpe, onSelect, onSkip }: RpeSheetProps) {
+function RpeSheet({ exerciseName, onSelect, onSkip }: RpeSheetProps) {
   return (
     <>
-      {/* Backdrop */}
       <div onClick={onSkip} style={{ position: 'fixed', inset: 0, background: 'rgba(12,9,32,0.7)', backdropFilter: 'blur(4px)', zIndex: 20 }} />
-
-      {/* Sheet */}
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, maxWidth: 430, margin: '0 auto', background: C.bgSoft, borderTop: `1px solid ${C.hairStrong}`, borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', zIndex: 21 }}>
-        {/* Handle */}
         <div style={{ width: 40, height: 4, borderRadius: 99, background: C.hair, margin: '0 auto 20px' }} />
-
-        <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: C.primary, fontWeight: 600 }}>Rate of perceived exertion</div>
+        <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: C.primary, fontWeight: 600 }}>How was that?</div>
         <div style={{ fontFamily: FONT_DISPLAY, fontSize: 22, margin: '6px 0 4px' }}>{exerciseName}</div>
         <div style={{ fontSize: 13, color: C.text2, marginBottom: 20 }}>How hard was that last set?</div>
-
-        {/* RPE label */}
-        <div style={{ fontSize: 14, color: C.primary, fontWeight: 600, minHeight: 22, marginBottom: 12, textAlign: 'center' }}>
-          {hoverRpe ? `${hoverRpe} — ${RPE_LABELS[hoverRpe]}` : 'Tap a number'}
+        <div style={{ display: 'grid', gap: 8 }}>
+          {RPE_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => onSelect(opt.value)}
+              style={{ textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `1px solid ${opt.color}40`, background: `${opt.color}12`, color: C.text, fontFamily: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: opt.color }}>{opt.label}</div>
+                <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>{opt.sub}</div>
+              </div>
+              <div style={{ width: 8, height: 8, borderRadius: 999, background: opt.color, flexShrink: 0 }} />
+            </button>
+          ))}
         </div>
-
-        {/* RPE buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => {
-            const color = n <= 4 ? C.good : n <= 7 ? C.primary : n <= 9 ? C.accent : C.danger
-            return (
-              <button
-                key={n}
-                onClick={() => onSelect(n)}
-                onMouseEnter={() => setHoverRpe(n)}
-                onMouseLeave={() => setHoverRpe(null)}
-                style={{ padding: '14px 0', borderRadius: 12, border: `1px solid ${hoverRpe === n ? color : C.hair}`, background: hoverRpe === n ? `${color}20` : C.surface, color: hoverRpe === n ? color : C.text2, fontSize: 18, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                {n}
-              </button>
-            )
-          })}
-        </div>
-
         <button
           onClick={onSkip}
-          style={{ marginTop: 16, width: '100%', padding: '14px', border: `1px solid ${C.hair}`, background: 'transparent', color: C.mute, borderRadius: 12, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
+          style={{ marginTop: 14, width: '100%', padding: '14px', border: `1px solid ${C.hair}`, background: 'transparent', color: C.mute, borderRadius: 12, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}
         >
-          Skip RPE
+          Skip
         </button>
       </div>
     </>
@@ -573,98 +549,86 @@ function RpeSheet({ exerciseName, hoverRpe, setHoverRpe, onSelect, onSkip }: Rpe
 // ─── Add exercise sheet ───────────────────────────────────────────────────
 
 interface AddExerciseSheetProps {
-    allExercises: import('../context').Exercise[]
-    currentIds: string[]
-    onAdd: (exercise: import('../context').Exercise) => void
-    onClose: () => void
-  }
-  
-  const GROUP_LABELS: Record<string, string> = {
-    chest: 'Chest', back: 'Back', arms: 'Arms', shoulders: 'Shoulders',
-    legs: 'Legs', abs: 'Abs', glutes: 'Glutes', cardio: 'Cardio',
-  }
-  
-  function AddExerciseSheet({ allExercises, currentIds, onAdd, onClose }: AddExerciseSheetProps) {
-    const [search, setSearch] = useState('')
-  
-    const filtered = allExercises.filter(ex => {
-      if (currentIds.includes(ex.id)) return false
-      if (!search.trim()) return true
-      const q = search.toLowerCase()
-      return (
-        ex.name.toLowerCase().includes(q) ||
-        ex.muscle_group.toLowerCase().includes(q) ||
-        ex.equipment.toLowerCase().includes(q)
-      )
-    })
-  
-    // Group by muscle_group for display
-    const grouped = filtered.reduce<Record<string, typeof filtered>>((acc, ex) => {
-      const g = ex.muscle_group
-      if (!acc[g]) acc[g] = []
-      acc[g].push(ex)
-      return acc
-    }, {})
-  
+  allExercises: import('../context').Exercise[]
+  currentIds: string[]
+  onAdd: (exercise: import('../context').Exercise) => void
+  onClose: () => void
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  chest: 'Chest', back: 'Back', arms: 'Arms', shoulders: 'Shoulders',
+  legs: 'Legs', abs: 'Abs', glutes: 'Glutes', cardio: 'Cardio',
+}
+
+function AddExerciseSheet({ allExercises, currentIds, onAdd, onClose }: AddExerciseSheetProps) {
+  const [search, setSearch] = useState('')
+
+  const filtered = allExercises.filter(ex => {
+    if (currentIds.includes(ex.id)) return false
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
     return (
-      <>
-        {/* Backdrop */}
-        <div
-          onClick={onClose}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(12,9,32,0.7)', backdropFilter: 'blur(4px)', zIndex: 20 }}
-        />
-  
-        {/* Sheet */}
-        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, maxWidth: 430, margin: '0 auto', background: C.bgSoft, borderTop: `1px solid ${C.hairStrong}`, borderRadius: '24px 24px 0 0', zIndex: 21, display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
-          {/* Header */}
-          <div style={{ padding: '20px 20px 12px', flexShrink: 0 }}>
-            <div style={{ width: 40, height: 4, borderRadius: 99, background: C.hair, margin: '0 auto 16px' }} />
-            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: C.primary, fontWeight: 600 }}>Mid-session</div>
-            <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, margin: '4px 0 14px' }}>Add an exercise</div>
-  
-            {/* Search input */}
-            <input
-              autoFocus
-              type="text"
-              placeholder="Search exercises…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${C.primary}40`, background: C.surface, color: C.text, fontSize: 14, fontFamily: FONT_BODY, outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
-  
-          {/* Scrollable list */}
-          <div style={{ overflowY: 'auto', padding: '0 20px 32px', flex: 1 }}>
-            {Object.keys(grouped).sort().map(group => (
-              <div key={group}>
-                {/* Group header */}
-                <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: C.mute, fontWeight: 700, padding: '14px 0 8px' }}>
-                  {GROUP_LABELS[group] ?? group}
-                </div>
-  
-                {grouped[group].map(ex => (
-                  <button
-                    key={ex.id}
-                    onClick={() => onAdd(ex)}
-                    style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `1px solid ${C.hairStrong}`, background: C.surface, color: C.text, fontFamily: 'inherit', cursor: 'pointer', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 700 }}>{ex.name}</div>
-                      <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>{ex.equipment}</div>
-                    </div>
-                    <div style={{ fontSize: 13, color: C.primary, fontWeight: 600, flexShrink: 0, marginLeft: 12 }}>+ Add</div>
-                  </button>
-                ))}
-              </div>
-            ))}
-  
-            {filtered.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: C.mute, fontSize: 14 }}>
-                No exercises match "{search}"
-              </div>
-            )}
-          </div>
-        </div>
-      </>
+      ex.name.toLowerCase().includes(q) ||
+      ex.muscle_group.toLowerCase().includes(q) ||
+      ex.equipment.toLowerCase().includes(q)
     )
-  }
+  })
+
+  const grouped = filtered.reduce<Record<string, typeof filtered>>((acc, ex) => {
+    const g = ex.muscle_group
+    if (!acc[g]) acc[g] = []
+    acc[g].push(ex)
+    return acc
+  }, {})
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(12,9,32,0.7)', backdropFilter: 'blur(4px)', zIndex: 20 }} />
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, maxWidth: 430, margin: '0 auto', background: C.bgSoft, borderTop: `1px solid ${C.hairStrong}`, borderRadius: '24px 24px 0 0', zIndex: 21, display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+        <div style={{ padding: '20px 20px 12px', flexShrink: 0 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 99, background: C.hair, margin: '0 auto 16px' }} />
+          <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: C.primary, fontWeight: 600 }}>Mid-session</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, margin: '4px 0 14px' }}>Add an exercise</div>
+          <input
+            autoFocus
+            type="text"
+            placeholder="Search exercises…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: `1px solid ${C.primary}40`, background: C.surface, color: C.text, fontSize: 14, fontFamily: FONT_BODY, outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ overflowY: 'auto', padding: '0 20px 32px', flex: 1 }}>
+          {Object.keys(grouped).sort().map(group => (
+            <div key={group}>
+              <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: C.mute, fontWeight: 700, padding: '14px 0 8px' }}>
+                {GROUP_LABELS[group] ?? group}
+              </div>
+              {grouped[group].map(ex => (
+                <button
+                  key={ex.id}
+                  onClick={() => onAdd(ex)}
+                  style={{ width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 14, border: `1px solid ${C.hairStrong}`, background: C.surface, color: C.text, fontFamily: 'inherit', cursor: 'pointer', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{ex.name}</div>
+                    <div style={{ fontSize: 12, color: C.mute, marginTop: 2 }}>{ex.equipment}</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.primary, fontWeight: 600, flexShrink: 0, marginLeft: 12 }}>+ Add</div>
+                </button>
+              ))}
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: C.mute, fontSize: 14 }}>
+              No exercises match "{search}"
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// need useState for AddExerciseSheet
+import { useState } from 'react'
