@@ -136,15 +136,16 @@ export default function SelectClient({ group, exercises: initialExercises }: Pro
     if (!user) return
 
     const { data, error } = await supabase
-      .from('exercises')
-      .insert({
-        name: customName.trim(),
-        muscle_group: customGroup,
-        equipment: customEquipment,
-        user_id: user.id,
-      })
-      .select('id, name, equipment, muscle_group, setup_notes')
-      .single()
+    .from('exercises')
+    .insert({
+      name: customName.trim(),
+      muscle_group: customGroup,
+      equipment: customEquipment,
+      user_id: user.id,
+      log_type: 'weight_reps',
+    })
+    .select('id, name, equipment, muscle_group, setup_notes, log_type')
+    .single()
 
     if (!error && data) {
         const newExercise: Exercise = {
