@@ -147,15 +147,16 @@ export default function SelectClient({ group, exercises: initialExercises }: Pro
       .single()
 
     if (!error && data) {
-      const newExercise: Exercise = {
-        id: data.id,
-        name: data.name,
-        equipment: data.equipment,
-        muscle_group: data.muscle_group,
-        setup_notes: data.setup_notes ?? null,
-        lastPerformance: null,
-        starterWeight: getStarterWeight(data.equipment),
-      }
+        const newExercise: Exercise = {
+            id: data.id,
+            name: data.name,
+            equipment: data.equipment,
+            muscle_group: data.muscle_group,
+            setup_notes: data.setup_notes ?? null,
+            lastPerformance: null,
+            starterWeight: getStarterWeight(data.equipment),
+            log_type: data.log_type ?? 'weight_reps',
+          }
       setExercises(prev => [...prev, newExercise])
       setSelected(prev => [...prev, data.id])
       setActiveGroup(customGroup)
