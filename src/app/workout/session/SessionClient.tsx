@@ -19,6 +19,8 @@ const SHADOW_1 = '0 0 14px rgba(183,148,255,0.5)'
 const FONT_DISPLAY = '"Fraunces", "Cormorant Garamond", Georgia, serif'
 const FONT_BODY = '"Inter", sans-serif'
 
+type LogType = 'weight_reps' | 'distance_time' | 'time_level' | 'time_reps'
+
 interface Props {
   userId: string
   allExercises: import('../context').Exercise[]
@@ -47,19 +49,16 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
   const sessionExerciseIds = useRef<Record<number, string>>({})
   const sessionCreated = useRef(false)
 
-  // Load initial notes into context
   useEffect(() => {
     for (const [exerciseId, note] of Object.entries(initialNotes)) {
       setExerciseNote(exerciseId, note)
     }
   }, [])
 
-  // Guard
   useEffect(() => {
     if (workoutExercises.length === 0) router.replace('/dashboard')
   }, [workoutExercises, router])
 
-  // Create session row on mount
   useEffect(() => {
     if (!checkin || sessionId || workoutExercises.length === 0 || sessionCreated.current) return
     sessionCreated.current = true
@@ -85,7 +84,6 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
     createSession()
   }, [checkin, workoutExercises])
 
-  // Log a single set
   const logSet = useCallback(async (exIdx: number, setIdx: number) => {
     if (!sessionId) return
     const we = workoutExercises[exIdx]
@@ -126,7 +124,6 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
     if (allLogged) setRpeSheetIdx(exIdx)
   }, [sessionId, workoutExercises, supabase, updateSet])
 
-  // Save RPE + mark complete
   const confirmRpe = useCallback(async (exIdx: number, rpe: number) => {
     const seId = sessionExerciseIds.current[exIdx]
     if (seId) {
@@ -143,7 +140,6 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
     if (nextIdx !== -1) setExpandedIdx(nextIdx)
   }, [sessionExerciseIds, supabase, setRpe, markExerciseComplete, workoutExercises])
 
-  // Finish workout
   const finishWorkout = async () => {
     if (!sessionId) return
     setSaving(true)
@@ -158,7 +154,6 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
     router.push('/workout/recap')
   }
 
-  // Save note
   const saveNote = async (exerciseId: string, note: string) => {
     setExerciseNote(exerciseId, note)
     const { data: { user } } = await supabase.auth.getUser()
@@ -216,6 +211,10 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
             const loggedSets = we.sets.filter(s => s.logged).length
             const currentNote = exerciseNotes[we.exercise.id] ?? ''
             const isEditingNote = editingNoteId === we.exercise.id
+            const logType: LogType = (we.exercise.log_type ?? 'weight_reps') as LogType
+
+            const col1Header = { weight_reps: 'Weight', distance_time: 'Distance', time_level: 'Time', time_reps: 'Time' }[logType]
+            const col2Header = { weight_reps: 'Reps', distance_time: 'Time', time_level: 'Level', time_reps: 'Rounds' }[logType]
 
             return (
               <div
@@ -249,34 +248,26 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
                     {isExpanded ? <ChevronUp size={18} color={C.mute} /> : <ChevronDown size={18} color={C.mute} />}
                   </button>
 
-                  {/* Undo complete button */}
+                  {/* Undo complete */}
                   {we.complete && (
                     <button
-                    onClick={async e => {
-                      e.stopPropagation()
-                      undoComplete(exIdx)
-                      const seId = sessionExerciseIds.current[exIdx]
-                      if (seId) {
-                        // Delete logged sets so they can be re-entered
-                        await supabase
-                          .from('exercise_sets')
-                          .delete()
-                          .eq('session_exercise_id', seId)
-                        // Mark exercise as incomplete
-                        await supabase
-                          .from('session_exercises')
-                          .update({ complete: false, rpe: null })
-                          .eq('id', seId)
-                      }
-                      setExpandedIdx(exIdx)
-                    }}
+                      onClick={async e => {
+                        e.stopPropagation()
+                        undoComplete(exIdx)
+                        const seId = sessionExerciseIds.current[exIdx]
+                        if (seId) {
+                          await supabase.from('exercise_sets').delete().eq('session_exercise_id', seId)
+                          await supabase.from('session_exercises').update({ complete: false, rpe: null }).eq('id', seId)
+                        }
+                        setExpandedIdx(exIdx)
+                      }}
                       style={{ flexShrink: 0, fontSize: 11, color: C.mute, background: 'transparent', border: `1px solid ${C.hair}`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit' }}
                     >
                       Undo
                     </button>
                   )}
 
-                  {/* Remove exercise button */}
+                  {/* Remove exercise */}
                   {!we.complete && (
                     <button
                       onClick={e => {
@@ -301,60 +292,56 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
                     )}
 
                     {/* Personal note */}
-                    {(() => {
-                      return (
-                        <div style={{ marginTop: 10, background: 'rgba(183,148,255,0.05)', border: `1px solid ${isEditingNote ? C.primary + '60' : C.hair}`, borderRadius: 10, padding: '10px 12px', marginBottom: 8, transition: 'border-color 0.2s' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isEditingNote || currentNote ? 6 : 0 }}>
-                            <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: C.primary, fontWeight: 700 }}>My note</div>
-                            {!isEditingNote && (
-                              <button
-                                onClick={() => { setEditingNoteId(we.exercise.id); setEditingNoteText(currentNote) }}
-                                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.mute, cursor: 'pointer', fontSize: 11, padding: 0, fontFamily: 'inherit' }}
-                              >
-                                <Pencil size={11} />
-                                {currentNote ? 'Edit' : 'Add note'}
-                              </button>
-                            )}
+                    <div style={{ marginTop: 10, background: 'rgba(183,148,255,0.05)', border: `1px solid ${isEditingNote ? C.primary + '60' : C.hair}`, borderRadius: 10, padding: '10px 12px', marginBottom: 8, transition: 'border-color 0.2s' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isEditingNote || currentNote ? 6 : 0 }}>
+                        <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', color: C.primary, fontWeight: 700 }}>My note</div>
+                        {!isEditingNote && (
+                          <button
+                            onClick={() => { setEditingNoteId(we.exercise.id); setEditingNoteText(currentNote) }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: C.mute, cursor: 'pointer', fontSize: 11, padding: 0, fontFamily: 'inherit' }}
+                          >
+                            <Pencil size={11} />
+                            {currentNote ? 'Edit' : 'Add note'}
+                          </button>
+                        )}
+                      </div>
+                      {isEditingNote ? (
+                        <div>
+                          <textarea
+                            autoFocus
+                            value={editingNoteText}
+                            onChange={e => setEditingNoteText(e.target.value)}
+                            placeholder="e.g. Seat height 4 · use far cable machine"
+                            rows={2}
+                            style={{ width: '100%', background: 'transparent', border: 'none', color: C.text, fontSize: 13, fontFamily: FONT_BODY, resize: 'none', outline: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
+                          />
+                          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                            <button
+                              onClick={async () => { await saveNote(we.exercise.id, editingNoteText); setEditingNoteId(null) }}
+                              style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${C.primary}, ${C.primary2})`, color: C.bg, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingNoteId(null)}
+                              style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.hair}`, background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                              Cancel
+                            </button>
                           </div>
-                          {isEditingNote ? (
-                            <div>
-                              <textarea
-                                autoFocus
-                                value={editingNoteText}
-                                onChange={e => setEditingNoteText(e.target.value)}
-                                placeholder="e.g. Seat height 4 · use far cable machine"
-                                rows={2}
-                                style={{ width: '100%', background: 'transparent', border: 'none', color: C.text, fontSize: 13, fontFamily: FONT_BODY, resize: 'none', outline: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
-                              />
-                              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                                <button
-                                  onClick={async () => { await saveNote(we.exercise.id, editingNoteText); setEditingNoteId(null) }}
-                                  style={{ flex: 1, padding: '8px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg, ${C.primary}, ${C.primary2})`, color: C.bg, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  onClick={() => setEditingNoteId(null)}
-                                  style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.hair}`, background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : currentNote ? (
-                            <div style={{ fontSize: 13, color: C.text2, lineHeight: 1.5 }}>{currentNote}</div>
-                          ) : (
-                            <div style={{ fontSize: 13, color: C.mute, fontStyle: 'italic' }}>Tap to add a note</div>
-                          )}
                         </div>
-                      )
-                    })()}
+                      ) : currentNote ? (
+                        <div style={{ fontSize: 13, color: C.text2, lineHeight: 1.5 }}>{currentNote}</div>
+                      ) : (
+                        <div style={{ fontSize: 13, color: C.mute, fontStyle: 'italic' }}>Tap to add a note</div>
+                      )}
+                    </div>
 
                     {/* Set rows */}
                     <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 44px 32px', gap: 8, padding: '0 4px' }}>
-                      {['Set', we.exercise.muscle_group === 'cardio' ? 'Distance' : 'Weight', we.exercise.muscle_group === 'cardio' ? 'Time' : 'Reps', '', ''].map((h, i) => (
-                       <div key={i} style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: C.mute, fontWeight: 600 }}>{h}</div>
+                        {['Set', col1Header, col2Header, '', ''].map((h, i) => (
+                          <div key={i} style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: C.mute, fontWeight: 600 }}>{h}</div>
                         ))}
                       </div>
 
@@ -371,12 +358,10 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
                             removeSet(exIdx, setIdx)
                             const remainingSets = we.sets.filter((_, j) => j !== setIdx)
                             const allNowLogged = remainingSets.every(s => s.logged)
-                            if (allNowLogged && remainingSets.length > 0) {
-                              setRpeSheetIdx(exIdx)
-                            }
+                            if (allNowLogged && remainingSets.length > 0) setRpeSheetIdx(exIdx)
                           }}
                           canRemove={!set.logged && we.sets.length > 1}
-                          isCardio={we.exercise.muscle_group === 'cardio'}
+                          logType={logType}
                         />
                       ))}
 
@@ -395,7 +380,7 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
         </div>
       </div>
 
-      {/* Fixed bottom actions */}
+      {/* Fixed bottom */}
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, padding: '12px 20px 32px', background: `linear-gradient(to top, ${C.bg} 70%, transparent)`, maxWidth: 430, margin: '0 auto', zIndex: 5, display: 'grid', gap: 8 }}>
         {anyComplete && (
           <button
@@ -442,7 +427,7 @@ export default function SessionClient({ userId, allExercises, initialNotes }: Pr
   )
 }
 
-// ─── Set row ─────────────────────────────────────────────────────────────
+// ─── Set row ──────────────────────────────────────────────────────────────
 
 interface SetRowProps {
   setNum: number
@@ -453,15 +438,21 @@ interface SetRowProps {
   onLog: () => void
   onRemove: () => void
   canRemove: boolean
-  isCardio: boolean
+  logType: LogType
 }
-function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, onRemove, canRemove, isCardio }: SetRowProps & { isCardio: boolean }) {
+
+function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, onRemove, canRemove, logType }: SetRowProps) {
   const inputStyle = (active: boolean): React.CSSProperties => ({
-    width: '100%', padding: '10px 8px', borderRadius: 10, border: `1px solid ${active ? C.primary + '60' : C.hair}`,
-    background: set.logged ? 'transparent' : C.bgSoft, color: set.logged ? C.mute : C.text,
-    fontSize: 15, fontWeight: 600, textAlign: 'center', fontFamily: FONT_BODY,
-    outline: 'none',
+    width: '100%', padding: '10px 8px', borderRadius: 10,
+    border: `1px solid ${active ? C.primary + '60' : C.hair}`,
+    background: set.logged ? 'transparent' : C.bgSoft,
+    color: set.logged ? C.mute : C.text,
+    fontSize: 15, fontWeight: 600, textAlign: 'center',
+    fontFamily: FONT_BODY, outline: 'none',
   })
+
+  const col1Label = { weight_reps: 'kg', distance_time: 'km', time_level: 'mins', time_reps: 'mins' }[logType]
+  const col2Label = { weight_reps: 'reps', distance_time: 'mins', time_level: 'level', time_reps: 'rounds' }[logType]
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 1fr 44px 32px', gap: 8, alignItems: 'center', opacity: disabled ? 0.4 : 1 }}>
@@ -471,14 +462,14 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
       <div>
         <input
           type="number"
-          value={isCardio ? (set.weight_kg || '') : (set.weight_kg || '')}
+          value={set.weight_kg || ''}
           onChange={e => onWeightChange(parseFloat(e.target.value) || 0)}
           disabled={set.logged || disabled}
           style={inputStyle(!set.logged && !disabled)}
           inputMode="decimal"
-          placeholder={isCardio ? 'km' : 'kg'}
+          placeholder={col1Label}
         />
-        <div style={{ fontSize: 9, color: C.mute, textAlign: 'center', marginTop: 2 }}>{isCardio ? 'km' : 'kg'}</div>
+        <div style={{ fontSize: 9, color: C.mute, textAlign: 'center', marginTop: 2 }}>{col1Label}</div>
       </div>
       <div>
         <input
@@ -488,9 +479,9 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
           disabled={set.logged || disabled}
           style={inputStyle(!set.logged && !disabled)}
           inputMode="numeric"
-          placeholder={isCardio ? 'mins' : 'reps'}
+          placeholder={col2Label}
         />
-        <div style={{ fontSize: 9, color: C.mute, textAlign: 'center', marginTop: 2 }}>{isCardio ? 'mins' : 'reps'}</div>
+        <div style={{ fontSize: 9, color: C.mute, textAlign: 'center', marginTop: 2 }}>{col2Label}</div>
       </div>
       <button
         onClick={onLog}
@@ -510,7 +501,7 @@ function SetRow({ setNum, set, disabled, onWeightChange, onRepsChange, onLog, on
   )
 }
 
-// ─── RPE sheet ───────────────────────────────────────────────────────────
+// ─── RPE sheet ────────────────────────────────────────────────────────────
 
 interface RpeSheetProps {
   exerciseName: string
@@ -644,3 +635,5 @@ function AddExerciseSheet({ allExercises, currentIds, onAdd, onClose }: AddExerc
     </>
   )
 }
+
+import { useState } from 'react'

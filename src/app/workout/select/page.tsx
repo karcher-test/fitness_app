@@ -16,12 +16,12 @@ export default async function SelectPage({ searchParams }: Props) {
 
   // Fetch ALL exercises across all groups (user browses via the filter strip)
 // Fetch ALL exercises including user's custom ones
-    const { data: exercises } = await supabase
-    .from('exercises')
-    .select('id, name, equipment, muscle_group, setup_notes')
-    .or(`user_id.is.null,user_id.eq.${user.id}`)
-    .order('muscle_group')
-    .order('name')
+const { data: exercises } = await supabase
+  .from('exercises')
+  .select('id, name, equipment, muscle_group, setup_notes, log_type')
+  .or(`user_id.is.null,user_id.eq.${user.id}`)
+  .order('muscle_group')
+  .order('name')
 
   const exerciseIds = (exercises ?? []).map(e => e.id)
 
@@ -64,6 +64,7 @@ export default async function SelectPage({ searchParams }: Props) {
         setup_notes: ex.setup_notes ?? null,
         lastPerformance: historyMap[ex.id]?.lastPerformance ?? null,
         starterWeight: historyMap[ex.id]?.starterWeight ?? getStarterWeight(ex.equipment),
+        log_type: ex.log_type ?? 'weight_reps',
       }))}
     />
   )

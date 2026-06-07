@@ -9,19 +9,17 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
-  // Try exact match first, then fuzzy
   let { data } = await supabase
     .from('exercises')
-    .select('id, name, equipment, muscle_group, setup_notes')
+    .select('id, name, equipment, muscle_group, setup_notes, log_type')
     .ilike('name', name)
     .limit(1)
     .maybeSingle()
 
-  // If no exact match, try contains
   if (!data) {
     const { data: fuzzy } = await supabase
       .from('exercises')
-      .select('id, name, equipment, muscle_group, setup_notes')
+      .select('id, name, equipment, muscle_group, setup_notes, log_type')
       .ilike('name', `%${name}%`)
       .limit(1)
       .maybeSingle()
@@ -35,6 +33,7 @@ export async function GET(req: NextRequest) {
     setup_notes: data.setup_notes ?? null,
     lastPerformance: null,
     starterWeight: getStarterWeight(data.equipment),
+    log_type: data.log_type ?? 'weight_reps',
   })
 }
 

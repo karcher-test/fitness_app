@@ -9,10 +9,11 @@ export default async function SessionPage() {
 
   // Fetch all exercises for the add sheet
   const { data: allExercises } = await supabase
-    .from('exercises')
-    .select('id, name, equipment, muscle_group, setup_notes')
-    .order('muscle_group')
-    .order('name')
+  .from('exercises')
+  .select('id, name, equipment, muscle_group, setup_notes, log_type')
+  .or(`user_id.is.null,user_id.eq.${user.id}`)
+  .order('muscle_group')
+  .order('name')
 
   // Fetch user's exercise notes
   const { data: notes } = await supabase
@@ -33,6 +34,7 @@ export default async function SessionPage() {
         setup_notes: ex.setup_notes ?? null,
         lastPerformance: null,
         starterWeight: getStarterWeight(ex.equipment),
+        log_type: ex.log_type ?? 'weight_reps',
       }))}
       initialNotes={noteMap}
     />

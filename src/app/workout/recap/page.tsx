@@ -17,6 +17,8 @@ const SHADOW_1 = '0 0 14px rgba(183,148,255,0.5)'
 const FONT_DISPLAY = '"Fraunces", "Cormorant Garamond", Georgia, serif'
 const FONT_BODY = '"Inter", sans-serif'
 
+type LogType = 'weight_reps' | 'distance_time' | 'time_level' | 'time_reps'
+
 function rpeLabel(rpe: number): string {
   if (rpe <= 1) return 'Too easy'
   if (rpe <= 3) return 'Good'
@@ -25,18 +27,34 @@ function rpeLabel(rpe: number): string {
   return 'Max effort'
 }
 
+function formatSet(weight_kg: number, reps: number, logType: LogType): string {
+  switch (logType) {
+    case 'distance_time': return `${weight_kg}km · ${reps}mins`
+    case 'time_level':    return `${weight_kg}mins · level ${reps}`
+    case 'time_reps':     return `${weight_kg}mins · ${reps} rounds`
+    default:              return weight_kg > 0 ? `${weight_kg}kg × ${reps}` : `${reps} reps`
+  }
+}
+
+function bestSetLabel(logType: LogType): string {
+  switch (logType) {
+    case 'distance_time': return 'Distance'
+    case 'time_level':    return 'Time'
+    case 'time_reps':     return 'Time'
+    default:              return 'Best set'
+  }
+}
+
 export default function RecapPage() {
   const router = useRouter()
   const { workoutExercises, sessionId, group, reset } = useWorkout()
 
-  // Guard: if no session, send home
   useEffect(() => {
     if (!sessionId) router.replace('/dashboard')
   }, [sessionId, router])
 
   if (!sessionId) return null
 
-  // ── Stats ──────────────────────────────────────────────────────────────
   const completedExercises = workoutExercises.filter(we => we.complete)
   const totalSets = workoutExercises.reduce(
     (acc, we) => acc + we.sets.filter(s => s.logged).length, 0
@@ -44,9 +62,12 @@ export default function RecapPage() {
   const totalReps = workoutExercises.reduce(
     (acc, we) => acc + we.sets.filter(s => s.logged).reduce((a, s) => a + s.reps, 0), 0
   )
-  const totalVolume = workoutExercises.reduce(
-    (acc, we) => acc + we.sets.filter(s => s.logged).reduce((a, s) => a + s.weight_kg * s.reps, 0), 0
-  )
+  const totalVolume = workoutExercises.reduce((acc, we) => {
+    const lt: LogType = (we.exercise.log_type ?? 'weight_reps') as LogType
+    if (lt !== 'weight_reps') return acc
+    return acc + we.sets.filter(s => s.logged).reduce((a, s) => a + s.weight_kg * s.reps, 0)
+  }, 0)
+
   const avgRpe = (() => {
     const rpes = completedExercises.map(we => we.rpe).filter(Boolean) as number[]
     if (rpes.length === 0) return null
@@ -60,15 +81,12 @@ export default function RecapPage() {
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: FONT_BODY, color: C.text, maxWidth: 430, margin: '0 auto', paddingBottom: 120, position: 'relative' }}>
-      {/* Glow blobs */}
       <div style={{ position: 'absolute', top: -100, right: -80, width: 300, height: 300, borderRadius: '50%', background: `radial-gradient(circle, ${C.glow1}, transparent 70%)`, filter: 'blur(40px)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', top: 300, left: -80, width: 240, height: 240, borderRadius: '50%', background: `radial-gradient(circle, ${C.glow2}, transparent 70%)`, filter: 'blur(50px)', pointerEvents: 'none' }} />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-
         {/* Hero */}
         <div style={{ padding: '48px 20px 24px', textAlign: 'center' }}>
-          {/* Checkmark circle */}
           <div style={{ width: 72, height: 72, borderRadius: '50%', background: `linear-gradient(135deg, ${C.good}, ${C.primary})`, display: 'grid', placeItems: 'center', margin: '0 auto 20px', boxShadow: `0 0 32px ${C.good}50` }}>
             <Check size={32} color={C.bg} strokeWidth={3} />
           </div>
@@ -85,7 +103,7 @@ export default function RecapPage() {
             { label: 'Sets', value: totalSets },
             { label: 'Reps', value: totalReps },
             { label: 'Avg RPE', value: avgRpe ? rpeLabel(avgRpe) : '—' },
-           ].map(stat => (
+          ].map(stat => (
             <div key={stat.label} style={{ background: C.surface, border: `1px solid ${C.hairStrong}`, borderRadius: 14, padding: '12px 8px', textAlign: 'center' }}>
               <div style={{ fontFamily: FONT_DISPLAY, fontSize: 24, lineHeight: 1, color: C.primary }}>{stat.value}</div>
               <div style={{ fontSize: 10, color: C.mute, marginTop: 4, letterSpacing: 0.5 }}>{stat.label}</div>
@@ -113,11 +131,12 @@ export default function RecapPage() {
         <div style={{ padding: '24px 20px 0' }}>
           <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: C.mute, fontWeight: 700, marginBottom: 12 }}>Breakdown</div>
           <div style={{ display: 'grid', gap: 10 }}>
-            {workoutExercises.map((we, i) => {
+            {workoutExercises.map((we) => {
               const loggedSets = we.sets.filter(s => s.logged)
               if (loggedSets.length === 0) return null
 
-              // Best set = highest weight × reps
+              const lt: LogType = (we.exercise.log_type ?? 'weight_reps') as LogType
+
               const bestSet = loggedSets.reduce((best, s) =>
                 s.weight_kg * s.reps > best.weight_kg * best.reps ? s : best
               )
@@ -134,41 +153,28 @@ export default function RecapPage() {
                         <span style={{ fontSize: 14, fontWeight: 700 }}>{we.exercise.name}</span>
                       </div>
                       <div style={{ fontSize: 12, color: C.mute, marginTop: 3 }}>
-                        {loggedSets.length} sets · {loggedSets.reduce((a, s) => a + s.reps, 0)} reps
-                        {we.rpe ? ` · RPE ${we.rpe}` : ''}
+                        {loggedSets.length} sets
+                        {we.rpe ? ` · RPE ${rpeLabel(we.rpe)}` : ''}
                       </div>
                     </div>
-                  {(bestSet.weight_kg > 0 || we.exercise.muscle_group === 'cardio') && (
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 11, color: C.mute }}>
-                        {we.exercise.muscle_group === 'cardio' ? 'Distance' : 'Best set'}
-                      </div>
+                      <div style={{ fontSize: 11, color: C.mute }}>{bestSetLabel(lt)}</div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: C.primary, marginTop: 1 }}>
-                        {we.exercise.muscle_group === 'cardio'
-                          ? `${bestSet.weight_kg}km · ${bestSet.reps}m`
-                          : `${bestSet.weight_kg}kg × ${bestSet.reps}`
-                        }
+                        {formatSet(bestSet.weight_kg, bestSet.reps, lt)}
                       </div>
                     </div>
-                  )}
                   </div>
 
                   {/* Set pills */}
                   <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {loggedSets.map((s, j) => {
-                      const isCardio = we.exercise.muscle_group === 'cardio'
-                      return (
-                        <div
-                          key={j}
-                          style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, background: C.primarySoft, color: C.primary, fontWeight: 600 }}
-                        >
-                          {isCardio
-                            ? `${s.weight_kg}km · ${s.reps}mins`
-                            : s.weight_kg > 0 ? `${s.weight_kg}kg × ${s.reps}` : `${s.reps} reps`
-                          }
-                        </div>
-                      )
-                    })}
+                    {loggedSets.map((s, j) => (
+                      <div
+                        key={j}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, background: C.primarySoft, color: C.primary, fontWeight: 600 }}
+                      >
+                        {formatSet(s.weight_kg, s.reps, lt)}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )

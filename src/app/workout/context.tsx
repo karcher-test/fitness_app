@@ -5,15 +5,15 @@ import { createContext, useContext, useState, ReactNode } from 'react'
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export interface Exercise {
-  id: string
-  name: string
-  equipment: string
-  muscle_group: string
-  setup_notes: string | null
-  lastPerformance: string | null
-  starterWeight: number
-}
-
+    id: string
+    name: string
+    equipment: string
+    muscle_group: string
+    setup_notes: string | null
+    lastPerformance: string | null
+    starterWeight: number
+    log_type: 'weight_reps' | 'distance_time' | 'time_level' | 'time_reps'
+  }
 export interface WorkoutSet {
   position: number
   weight_kg: number
